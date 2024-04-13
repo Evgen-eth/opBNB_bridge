@@ -8,7 +8,6 @@ from utils import read_json
 from models import TokenAmount
 from models import BSC
 
-
 class Bridge:
 
     def __init__(self, client: Client):
@@ -26,23 +25,45 @@ class Bridge:
             address=self.router_address
         )
         amount = TokenAmount(value)
-        try:
-            tx = self.client.send_transaction(
-                to=self.router_address,
-                data=contract.encodeABI('depositETH',
-                                        args=(
-                                            1,
-                                            '0x'
-                                        )),
-                value=amount.Wei
-            )
 
-            success_tx = self.client.verif_tx(tx)
+        max_attempts = 3
+        attempts = 0
+        while attempts < max_attempts:
+            try:
+                tx = self.client.send_transaction(
+                    to=self.router_address,
+                    data=contract.encodeABI('depositETH',
+                                            args=(
+                                                1,
+                                                '0x'
+                                            )),
+                    value=amount.Wei
+                )
+                
+                success_tx = self.client.verif_tx(tx)
 
-            if success_tx:
-                logger.info(f"https://bscscan.com/tx/{tx.hex()}")
-                logger.success(f'[{self.client.address}][opBNB Bridge] Successfully bridge to opBNB')
-            else:
-                logger.error(f'[{self.client.address}][opBNB Bridge] bridge error to opBNB')
-        except Exception as err:
-            logger.error(f'[{self.client.address}][opBNB Bridge] bridge error to opBNB: {type(err).__name__} {err}')
+                if success_tx:
+                    logger.info(f"https://bscscan.com/tx/{tx.hex()}")
+                    logger.success(f'[{self.client.address}][opBNB Bridge] Successfully bridged to opBNB')
+                    return
+                else:
+                    logger.error(f'[{self.client.address}][opBNB Bridge] Bridge error to opBNB')
+                    attempts += 1
+                    time.sleep(10) 
+
+            except Exception as err:
+                logger.error(f'[{self.client.address}][opBNB Bridge] Bridge error to opBNB: {type(err).__name__} {err}')
+
+                attempts += 1
+                time.sleep(10)
+
+            else:  
+                try:
+                    file_path = 'fail.txt'
+                    with open(file_path, 'a') as file:
+                        file.write(f'Failed attempt for address: {self.client.address}\n')
+
+                except Exception as write_err:
+                    logger.error(f'Error writing to file: {type(write_err).__name__} {write_err}')
+
+        logger.error(f'[{self.client.address}][opBNB Bridge] Max attempts reached, unable to bridge to opBNB')
